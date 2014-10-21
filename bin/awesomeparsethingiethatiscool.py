@@ -47,21 +47,39 @@ def audit_reader(row):
     mon_lookup = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
     month = mon_lookup[mon_str.lower()]
     data["@timestamp"] = "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
-    data['hostname'] = host
+    data['hostname'] = sys.argv[1]
     if 'cmdline' in data:
         data['cmd'] = data['cmdline'].split(' ')[0]
     send_to_es(data, "audit", "audit", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
 
+def get_reader(name):
+    if name == 'audit':
+        return audit_reader
+    if name == 'exceptions':
+        return exceptions_reader
+    def reader(row):
+        if not row.startswith('app'):
+            return
+        data = dict([it.split('=', 1) for it in row.split(' ')])
+        if 'now' in data:
+            data["@timestamp"] = data['now'][1:-2] + ".00"
+            del data['now']
+        data['hostname'] = sys.argv[1]
+        send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+    return reader
+
+
 def main():
     logging.basicConfig()
+    reader = get_reader(sys.argv[2])
     while True:
-        row = sys.stdin.readline().strip()
+        row = sys.stdin.readline()
         if not row:
             break
+        row = row.strip()
         try:
-#            exceptions_reader(row)
             if row:
-                audit_reader(row)
+                reader(row)
             print '.'
         except:
             log.exception("Failed with row: %s" % repr(row))
