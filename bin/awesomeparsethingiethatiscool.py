@@ -86,6 +86,14 @@ def redis_reader(row):
     except Exception as e:
         print "error %s:%s in line:\n%s" % (type(e), e, row,)
 
+def syslog_reader(row):
+    (mon_str, day_str, tm_str, host, src, rest) = row.split(" ", 5)
+    data = dict()
+    data["@timestamp"] = _get_timestamp(day_str, mon_str, tm_str)
+    data['hostname'] = HOSTNAME
+    data['rest'] = rest
+    send_to_es(data, "syslog", "syslog", es_url=DEFAULT_ES)
+
 def parse_generic(row):
     data = {}
     while True:
@@ -120,6 +128,8 @@ def get_reader(name):
     	return redis_reader
     if name == 'exceptions':
         return exceptions_reader
+    if name == 'syslog':
+        return syslog_reader
     def reader(row):
         data = parse_generic(row)
         if len(data) < 3:
