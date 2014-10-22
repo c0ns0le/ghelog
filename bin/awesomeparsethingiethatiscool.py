@@ -15,7 +15,6 @@ queue = Queue.Queue(500)
 
 DEFAULT_ES = "http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200"
 HOSTNAME = None
-MON_LOOKUP = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
 
 '''
 def get_index_name(indexname, es_timestamp):
@@ -36,6 +35,11 @@ def worker():
         print ':'
 
 [threading.Thread(target=worker).start() for i in range(10)]
+
+def _get_timestamp(day_str, mon_str, tm_str):
+    mon_lookup = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
+    month = mon_lookup[mon_str.lower()]
+    return "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
 
 def send_to_es(data, indexname, documenttype, es_url):
     args = {"url": es_url,
@@ -60,8 +64,7 @@ def exceptions_reader(row):
 def audit_reader(row):
     (mon_str, day_str, tm_str, host, src, rest) = row.split(" ", 5)
     data = json.loads(rest)
-    month = MON_LOOKUP[mon_str.lower()]
-    data["@timestamp"] = "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
+    data["@timestamp"] = _get_timestamp(day_str, mon_str, tm_str)
     data['hostname'] = HOSTNAME
     if 'cmdline' in data:
         data['cmd'] = data['cmdline'].split(' ')[0]
@@ -76,10 +79,7 @@ def redis_reader(row):
         timestamp_str = timestamp_str.strip().split()
         rest_str = rest_str.strip().split()
         data = dict()
-        day_str = timestamp_str[1]
-        month = MON_LOOKUP[timestamp_str[2].lower()]
-        tm_str = timestamp_str[3]
-        data["@timestamp"] = "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
+        data["@timestamp"] = _get_timestamp(day_str=timestamp_str[1], mon_str=timestamp_str[2], tm_str=timestamp_str[3])
         data['hostname'] = HOSTNAME
         data['avg_number_of_changes'] = float(rest_str[0]) / float(rest_str[3])
         send_to_es(data, "redis", "redis", es_url=DEFAULT_ES)
