@@ -87,11 +87,17 @@ def redis_reader(row):
         print "error %s:%s in line:\n%s" % (type(e), e, row,)
 
 def syslog_reader(row):
-    (mon_str, day_str, tm_str, host, src, rest) = row.split(" ", 5)
+    (mon_str, day_str, tm_str, host, src, msg) = row.split(" ", 5)
     data = dict()
     data["@timestamp"] = _get_timestamp(day_str, mon_str, tm_str)
     data['hostname'] = HOSTNAME
-    data['rest'] = rest
+    if '[' in src:
+        data['src'] = src[0 : src.find('[')]
+        data['pid'] = src[src.find('[') + 1 : src.find(']')] 
+    else:
+        data['src'] = src
+    print data['src']
+    data['message'] = msg
     send_to_es(data, "syslog", "syslog", es_url=DEFAULT_ES)
 
 def parse_generic(row):
