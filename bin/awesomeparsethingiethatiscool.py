@@ -15,6 +15,7 @@ queue = Queue.Queue(500)
 
 DEFAULT_ES = "http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200"
 HOSTNAME = None
+MON_LOOKUP = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
 
 '''
 def get_index_name(indexname, es_timestamp):
@@ -59,14 +60,31 @@ def exceptions_reader(row):
 def audit_reader(row):
     (mon_str, day_str, tm_str, host, src, rest) = row.split(" ", 5)
     data = json.loads(rest)
-    mon_lookup = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
-    month = mon_lookup[mon_str.lower()]
+    month = MON_LOOKUP[mon_str.lower()]
     data["@timestamp"] = "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
     data['hostname'] = HOSTNAME
     if 'cmdline' in data:
         data['cmd'] = data['cmdline'].split(' ')[0]
     send_to_es(data, "audit", "audit", es_url=DEFAULT_ES)
 
+
+def redis_reader(row):    
+    if 'changes in' not in row:        
+        return  
+    try:
+        (timestamp_str, rest_str) = row.split("*", 2)
+        timestamp_str = timestamp_str.strip().split()
+        rest_str = rest_str.strip().split()
+        data = dict()
+        day_str = timestamp_str[1]
+        month = MON_LOOKUP[timestamp_str[2].lower()]
+        tm_str = timestamp_str[3]
+        data["@timestamp"] = "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
+        data['hostname'] = HOSTNAME
+        data['avg_number_of_changes'] = float(rest_str[0]) / float(rest_str[3])
+        send_to_es(data, "redis", "redis", es_url=DEFAULT_ES)
+    except Exception as e:
+        print "error %s:%s in line:\n%s" % (type(e), e, row,)
 
 def parse_generic(row):
     data = {}
@@ -98,6 +116,8 @@ def parse_generic(row):
 def get_reader(name):
     if name == 'audit':
         return audit_reader
+    if name == 'redis':
+    	return redis_reader
     if name == 'exceptions':
         return exceptions_reader
     def reader(row):
@@ -133,7 +153,6 @@ def main():
             print '.'
         except:
             log.exception("Failed with row: %s" % repr(row))
-
 
 if __name__ == "__main__":
     main()
