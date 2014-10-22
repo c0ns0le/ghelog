@@ -13,7 +13,7 @@ import threading
 log = logging.getLogger(__name__)
 queue = Queue.Queue(500)
 
-# TODO: hostname
+HOSTNAME = None
 
 def get_index_name(indexname, es_timestamp):
     """Generate an index name for ES that enables data
@@ -49,7 +49,7 @@ def exceptions_reader(row):
     # created_at":"2014-10-16T10:41:44.870553Z
     data["@timestamp"] = data["created_at"][0:-5]
     del data["created_at"]
-    data['hostname'] = sys.argv[1]
+    data['hostname'] = HOSTNAME
     send_to_es(data, "exceptions", "exceptions", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
 
 
@@ -59,7 +59,7 @@ def audit_reader(row):
     mon_lookup = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
     month = mon_lookup[mon_str.lower()]
     data["@timestamp"] = "%.4d-%.2d-%.2dT%s.00" % (datetime.datetime.now().year, month, int(day_str), tm_str)
-    data['hostname'] = sys.argv[1]
+    data['hostname'] = HOSTNAME
     if 'cmdline' in data:
         data['cmd'] = data['cmdline'].split(' ')[0]
     send_to_es(data, "audit", "audit", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
@@ -104,15 +104,16 @@ def get_reader(name):
         if 'now' in data:
             data["@timestamp"] = data['now'][0:-1] + ".00"
             del data['now']
-        data['hostname'] = sys.argv[1]
-        print data
-#        send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+        data['hostname'] = HOSTNAME
+        send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
     return reader
 
 
 def main():
+	global HOSTNAME
     logging.basicConfig()
     reader = get_reader(sys.argv[2])
+    HOSTNAME = sys.argv[1]
     while True:
         row = sys.stdin.readline()
         if not row:
