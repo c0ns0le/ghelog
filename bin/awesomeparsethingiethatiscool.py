@@ -13,8 +13,10 @@ import threading
 log = logging.getLogger(__name__)
 queue = Queue.Queue(500)
 
+DEFAULT_ES = "http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200"
 HOSTNAME = None
 
+'''
 def get_index_name(indexname, es_timestamp):
     """Generate an index name for ES that enables data
     retention.
@@ -24,6 +26,7 @@ def get_index_name(indexname, es_timestamp):
     daystring = time.strftime("%Y.%m.%d", ts)
     fullname = "%s-%s" % (indexname, daystring)
     return fullname
+'''
 
 def worker():
     while True:
@@ -50,7 +53,7 @@ def exceptions_reader(row):
     data["@timestamp"] = data["created_at"][0:-5]
     del data["created_at"]
     data['hostname'] = HOSTNAME
-    send_to_es(data, "exceptions", "exceptions", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+    send_to_es(data, "exceptions", "exceptions", es_url=DEFAULT_ES)
 
 
 def audit_reader(row):
@@ -62,7 +65,7 @@ def audit_reader(row):
     data['hostname'] = HOSTNAME
     if 'cmdline' in data:
         data['cmd'] = data['cmdline'].split(' ')[0]
-    send_to_es(data, "audit", "audit", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+    send_to_es(data, "audit", "audit", es_url=DEFAULT_ES)
 
 
 def parse_generic(row):
@@ -110,8 +113,7 @@ def get_reader(name):
             data["@timestamp"] = ts + ".00"
             del data['now']
         data['hostname'] = HOSTNAME
-#        print data
-        send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+        send_to_es(data, name, name, es_url=DEFAULT_ES)
     return reader
 
 
