@@ -31,7 +31,7 @@ def worker():
         requests.post(arg[0], data=arg[1], timeout=10)
         print ':'
 
-[ threading.Thread(target=worker).start() for i in range(10)]
+[threading.Thread(target=worker).start() for i in range(10)]
 
 def send_to_es(data, indexname, documenttype, es_url):
     args = {"url": es_url,
@@ -98,9 +98,9 @@ def get_reader(name):
     if name == 'exceptions':
         return exceptions_reader
     def reader(row):
-        if not row.startswith('app'):
-            return
         data = parse_generic(row)
+        if len(data) < 3:
+            return
         if 'now' in data:
             ts = data['now']
             if ts.find('+') != -1:
