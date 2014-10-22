@@ -102,15 +102,21 @@ def get_reader(name):
             return
         data = parse_generic(row)
         if 'now' in data:
-            data["@timestamp"] = data['now'][0:-1] + ".00"
+            ts = data['now']
+            if ts.find('+') != -1:
+                ts = ts[0:ts.find('+')]
+            else:
+                ts = ts[0:-1]
+            data["@timestamp"] = ts + ".00"
             del data['now']
         data['hostname'] = HOSTNAME
+#        print data
         send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
     return reader
 
 
 def main():
-	global HOSTNAME
+    global HOSTNAME
     logging.basicConfig()
     reader = get_reader(sys.argv[2])
     HOSTNAME = sys.argv[1]
