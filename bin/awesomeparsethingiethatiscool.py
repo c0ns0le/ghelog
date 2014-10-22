@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 # -*- mode: python -*-
-#
+
 import logging
 from pprint import pprint
 import json
 import requests
 import sys
 import datetime
+import Queue
+import threading
 
 log = logging.getLogger(__name__)
+queue = Queue.Queue(500)
 
 # TODO: hostname
 
@@ -22,16 +25,24 @@ def get_index_name(indexname, es_timestamp):
     fullname = "%s-%s" % (indexname, daystring)
     return fullname
 
+def worker():
+    while True:
+        arg = queue.get()
+        requests.post(arg[0], data=arg[1], timeout=10)
+        print ':'
 
-def send_to_es(data, indexname="exceptions", documenttype="exceptions", es_url="http://localhost:9200"):
+[ threading.Thread(target=worker).start() for i in range(10)]
+
+def send_to_es(data, indexname, documenttype, es_url):
     args = {"url": es_url,
             "indexname": indexname,
             "documenttype": documenttype}
     es_url = "%(url)s/%(indexname)s/%(documenttype)s" % args
     jsondata = json.dumps(data, indent=2)
-    requests.post(es_url, data=jsondata, timeout=10)
-
-
+    try:
+        queue.put([es_url, jsondata], True)
+    except:
+        print "Failed, queue full"
 
 def exceptions_reader(row):
     data = json.loads(row)
@@ -40,6 +51,7 @@ def exceptions_reader(row):
     del data["created_at"]
     data['hostname'] = sys.argv[1]
     send_to_es(data, "exceptions", "exceptions", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+
 
 def audit_reader(row):
     (mon_str, day_str, tm_str, host, src, rest) = row.split(" ", 5)
@@ -52,6 +64,34 @@ def audit_reader(row):
         data['cmd'] = data['cmdline'].split(' ')[0]
     send_to_es(data, "audit", "audit", es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
 
+
+def parse_generic(row):
+    data = {}
+    while True:
+        try:
+            idx = row.index('=')
+        except ValueError:
+            return data
+        key = row[0:idx].strip()
+        row = row[idx+1:].strip()
+        if row[0]=='"':
+            split = row[1:].split('"', 1)
+            value = split[0]
+            try:
+                row = split[1]
+            except IndexError:
+                row=''
+        else:
+            split = row.split(' ', 1)
+            value = split[0]
+            try:
+                row = split[1]
+            except IndexError:
+                row=''
+
+        data[key] = value
+
+
 def get_reader(name):
     if name == 'audit':
         return audit_reader
@@ -60,12 +100,13 @@ def get_reader(name):
     def reader(row):
         if not row.startswith('app'):
             return
-        data = dict([it.split('=', 1) for it in row.split(' ')])
+        data = parse_generic(row)
         if 'now' in data:
-            data["@timestamp"] = data['now'][1:-2] + ".00"
+            data["@timestamp"] = data['now'][0:-1] + ".00"
             del data['now']
         data['hostname'] = sys.argv[1]
-        send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
+        print data
+#        send_to_es(data, name, name, es_url="http://awseu3-docker-a1.cb-elk.cloud.spotify.net:9200")
     return reader
 
 
@@ -83,6 +124,7 @@ def main():
             print '.'
         except:
             log.exception("Failed with row: %s" % repr(row))
+
 
 if __name__ == "__main__":
     main()
